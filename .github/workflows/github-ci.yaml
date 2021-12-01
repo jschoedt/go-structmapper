@@ -1,0 +1,45 @@
+name: Go
+
+on: [ push ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Set up Go
+        uses: actions/setup-go@v2
+        with:
+          go-version: 1.11
+
+      - name: Build
+        run: go build -i
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Set up Go
+        uses: actions/setup-go@v2
+        with:
+          go-version: 1.11
+
+      - name: Test
+        run: |
+          go test -v ./...
+          go test -race -short ./...
+          go test -coverprofile=coverage.out ./...
+
+      - name: Convert coverage file
+        uses: jandelgado/gcov2lcov-action@v1.0.5
+        with:
+          infile: coverage.out        # optional, default filename is `coverage.out`
+          outfile: coverage.lcov      # optional, default filename is `coverage.lcov`
+
+      - name: Publish to coveralls.io
+        uses: coverallsapp/github-action@v1.1.2
+        with:
+          path-to-lcov: coverage.lcov
+          github-token: ${{ github.token }}
+
