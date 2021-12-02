@@ -4,3 +4,36 @@
 [![GoDoc](https://godoc.org/github.com/jschoedt/go-structmapper?status.svg)](https://godoc.org/github.com/jschoedt/go-structmapper)
 
 # go-structmapper
+
+Convert a struct into a map and vice versa.
+
+#### Features
+
+- Handles composed structs
+- Handles nested structs
+- Handles reference cycles
+- Supports field filtering or conversion
+
+#### Prerequisites
+
+```
+go get -u github.com/jschoedt/go-structmapper
+```
+
+#### Default usage
+
+```go
+s := SomeStruce{Name: "John"}
+mapper := New()
+m, err := mapper.MapStructToMap(s)
+m["Name"] == "John"
+```
+
+#### Using a conversion mapping
+
+```go
+s := SomeStruce{Name: "John"}
+mapper := NewWithFilter(LowercaseMapFunk)
+m, err := mapper.MapStructToMap(s)
+m["name"] == "John"
+```

@@ -11,8 +11,11 @@ import (
 type MappingType int
 
 const (
+	// Default use the default mapping logic provided
 	Default MappingType = iota
+	// Custom force the key to be a value
 	Custom
+	// Ignore ignores the field entirely
 	Ignore
 )
 
@@ -25,28 +28,33 @@ type MapFunc func(inKey string, inVal interface{}) (mt MappingType, outKey strin
 
 // Mapper used for mapping structs to maps or other structs
 type Mapper struct {
-	MapperFunc MapFunc
+	MapFunc MapFunc
 }
 
 // New creates a new mapper
 func New() *Mapper {
-	m := &Mapper{DefaultMapFunk}
+	m := &Mapper{DefaultMapFunc}
 	return m
 }
 
-// NewWithFunc with a custom MapFunc
-func NewWithFunc(mapperFunc MapFunc) *Mapper {
-	m := &Mapper{mapperFunc}
+// NewWithMapFunc with a custom MapFunc
+func NewWithMapFunc(mapFunc MapFunc) *Mapper {
+	m := &Mapper{mapFunc}
 	return m
 }
 
-// DefaultMapFunk default mapper that returns the same field name and value
-func DefaultMapFunk(inKey string, inVal interface{}) (mt MappingType, outKey string, outVal interface{}) {
+// DefaultMapFunc default mapper that returns the same field name and value
+func DefaultMapFunc(inKey string, inVal interface{}) (mt MappingType, outKey string, outVal interface{}) {
 	return Default, inKey, inVal
 }
 
-// MapTo takes a map or a struct ptr (as fromPtr) and maps to a struct ptr
-func (mapper *Mapper) MapTo(fromPtr interface{}, toPtr interface{}) error {
+// LowercaseMapFunk maps the key to lowercase
+func LowercaseMapFunk(inKey string, inVal interface{}) (mt MappingType, outKey string, outVal interface{}) {
+	return Default, strings.ToLower(inKey), inVal
+}
+
+// MapToStruct takes a map or a struct ptr (as fromPtr) and maps to a struct ptr
+func (mapper *Mapper) MapToStruct(fromPtr interface{}, toPtr interface{}) error {
 	c := make(map[interface{}]reflect.Value)
 	return mapper.cachedMapMapToStruct(fromPtr, toPtr, c)
 }
@@ -58,11 +66,11 @@ func (mapper *Mapper) cachedMapMapToStruct(fromPtr interface{}, toPtr interface{
 	if ok {
 		valMap := make(map[string]reflect.Value, len(m))
 		for k, v := range m {
-			valMap[strings.ToLower(k)] = reflect.ValueOf(v)
+			valMap[k] = reflect.ValueOf(v)
 		}
 		return mapper.mapMapToValues(valMap, toStruct, c)
 	}
-	fromMap, err := mapper.MapStructToMap(fromStruct)
+	fromMap, err := mapper.StructToMap(fromStruct)
 	if err != nil {
 		return err
 	}
@@ -72,7 +80,7 @@ func (mapper *Mapper) cachedMapMapToStruct(fromPtr interface{}, toPtr interface{
 func (mapper *Mapper) mapMapToValues(fromMap map[string]reflect.Value, toPtr reflect.Value, c map[interface{}]reflect.Value) error {
 	toStruct := reflect.Indirect(toPtr) // entity is a pointer
 	toMap := mapper.flatten(toStruct)
-	var errstrings []string
+	var errStrings []string
 
 	//fmt.Printf("toMap: %v  \n", toMap)
 	//fmt.Printf("fromMap: %v  \n", fromMap)
@@ -83,7 +91,7 @@ func (mapper *Mapper) mapMapToValues(fromMap map[string]reflect.Value, toPtr ref
 				continue
 			}
 
-			mt, fromName, fromMapping := mapper.MapperFunc(fromName, fromField.Interface())
+			mt, fromName, fromMapping := mapper.MapFunc(fromName, fromField.Interface())
 			fromField := reflect.ValueOf(fromMapping)
 			switch mt {
 			case Ignore:
@@ -115,18 +123,32 @@ func (mapper *Mapper) mapMapToValues(fromMap map[string]reflect.Value, toPtr ref
 				}
 			}
 
-			// try to set the value to to target after conversion
+			// try to set the value to target after conversion
 			if fromField.Type().ConvertibleTo(toField.Type()) {
 				setField(fromField, toField)
 			} else {
-				errstrings = append(errstrings, fromName+":["+fromField.String()+" -> "+toField.String()+"]")
+				errStrings = append(errStrings, fromName+":["+stringVal(fromField)+" -> "+stringVal(toField)+"]")
 			}
 		}
 	}
-	if len(errstrings) > 0 {
-		return errors.New(strings.Join(errstrings, "\n"))
+	if len(errStrings) > 0 {
+		return errors.New(strings.Join(errStrings, "\n"))
 	}
 	return nil
+}
+
+func stringVal(val reflect.Value) string {
+	if !val.IsValid() {
+		return "nil"
+	}
+	i := val.Interface()
+	if v, ok := i.(reflect.Value); ok {
+		return stringVal(v)
+	}
+	if v, ok := i.(string); ok {
+		return v
+	}
+	return "Unknown"
 }
 
 // Handles the creation of a value or a pointer to a value according to toType
@@ -188,7 +210,8 @@ type flattenResolver struct {
 	isResolving map[interface{}]bool
 }
 
-func (mapper *Mapper) MapStructToMap(s interface{}) (map[string]interface{}, error) {
+// StructToMap maps a struct to a map. Including nested structs
+func (mapper *Mapper) StructToMap(s interface{}) (map[string]interface{}, error) {
 	flattenResolver := &flattenResolver{
 		isResolving: make(map[interface{}]bool),
 		cache:       make(map[interface{}]map[string]interface{}),
@@ -217,8 +240,8 @@ func (mapper *Mapper) cachedFlattenStruct(s interface{}, resolver *flattenResolv
 		f := v.Field(i)
 		sf := v.Type().Field(i)
 
-		key := strings.ToLower(sf.Name)
-		mt, key, val := mapper.MapperFunc(key, getDefaultValue(f))
+		key := sf.Name
+		mt, key, val := mapper.MapFunc(key, getDefaultValue(f))
 		switch mt {
 		case Ignore:
 			continue
@@ -236,7 +259,7 @@ func (mapper *Mapper) cachedFlattenStruct(s interface{}, resolver *flattenResolv
 			// handle nil pointers and other types than struct
 			val := reflect.Indirect(f)
 			if val.Kind() == reflect.Invalid || val.Kind() != reflect.Struct {
-				fields[strings.ToLower(sf.Name)] = getDefaultValue(val)
+				fields[key] = getDefaultValue(val)
 				break
 			}
 
@@ -244,7 +267,7 @@ func (mapper *Mapper) cachedFlattenStruct(s interface{}, resolver *flattenResolv
 			ptr := getDefaultValue(f)
 			if resolver.isResolving[ptr] == true {
 				resolver.toResolve[ptr] = append(resolver.toResolve[ptr], func(m map[string]interface{}) {
-					fields[strings.ToLower(sf.Name)] = m // closure ok
+					fields[key] = m // closure ok
 				})
 			} else {
 				// ok resolve it then
@@ -253,7 +276,7 @@ func (mapper *Mapper) cachedFlattenStruct(s interface{}, resolver *flattenResolv
 					return nil, err
 				} else {
 					resolver.cache[ptr] = m
-					fields[strings.ToLower(sf.Name)] = m
+					fields[key] = m
 				}
 			}
 		case reflect.Struct:
@@ -265,7 +288,7 @@ func (mapper *Mapper) cachedFlattenStruct(s interface{}, resolver *flattenResolv
 						fields[k] = v
 					}
 				} else {
-					fields[strings.ToLower(sf.Name)] = m
+					fields[key] = m
 				}
 			}
 		case reflect.Array:
@@ -285,7 +308,7 @@ func (mapper *Mapper) cachedFlattenStruct(s interface{}, resolver *flattenResolv
 						elemSlice.Index(i).Set(reflect.ValueOf(m))
 					}
 				}
-				fields[strings.ToLower(sf.Name)] = elemSlice.Interface()
+				fields[key] = elemSlice.Interface()
 				break
 			}
 			fallthrough
@@ -333,7 +356,7 @@ func (mapper *Mapper) flatten(v reflect.Value) map[string]reflect.Value {
 				//fmt.Printf("unexported field: %v  \n", sf.Name)
 				f = reflect.NewAt(f.Type(), unsafe.Pointer(f.UnsafeAddr())).Elem()
 			}
-			fields[strings.ToLower(sf.Name)] = f
+			fields[sf.Name] = f
 		}
 	}
 	return fields
