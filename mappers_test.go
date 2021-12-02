@@ -2,6 +2,7 @@ package mapper
 
 import (
 	"github.com/google/go-cmp/cmp"
+	"strings"
 	"testing"
 	"time"
 )
@@ -83,8 +84,11 @@ func TestStructToMap(t *testing.T) {
 func TestFilter(t *testing.T) {
 	john := Person{Name: "John"}
 
-	mapper := NewWithMapFunc(LowercaseMapFunk)
-	m, err := mapper.StructToMap(john)
+	mapFunc := func(inKey string, inVal interface{}) (mt MappingType, outKey string, outVal interface{}) {
+		return Default, strings.ToLower(inKey), inVal
+	}
+	mapper := NewWithMapFunc(mapFunc)
+	m, err := mapper.StructToMap(&john)
 	if err != nil {
 		t.Errorf("Could not convert struct to map %v", err)
 	}

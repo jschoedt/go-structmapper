@@ -48,11 +48,6 @@ func DefaultMapFunc(inKey string, inVal interface{}) (mt MappingType, outKey str
 	return Default, inKey, inVal
 }
 
-// LowercaseMapFunk maps the key to lowercase
-func LowercaseMapFunk(inKey string, inVal interface{}) (mt MappingType, outKey string, outVal interface{}) {
-	return Default, strings.ToLower(inKey), inVal
-}
-
 // MapToStruct takes a map or a struct ptr (as fromPtr) and maps to a struct ptr
 func (mapper *Mapper) MapToStruct(fromPtr interface{}, toPtr interface{}) error {
 	c := make(map[interface{}]reflect.Value)
@@ -210,14 +205,19 @@ type flattenResolver struct {
 	isResolving map[interface{}]bool
 }
 
-// StructToMap maps a struct to a map. Including nested structs
-func (mapper *Mapper) StructToMap(s interface{}) (map[string]interface{}, error) {
+// StructToMap maps a struct pointer to a map. Including nested structs
+func (mapper *Mapper) StructToMap(sp interface{}) (map[string]interface{}, error) {
+	toStruct := reflect.ValueOf(sp)
+	if toStruct.Kind() != reflect.Ptr {
+		return nil, errors.New("StructToMap only takes a pointer type to a struct")
+	}
 	flattenResolver := &flattenResolver{
 		isResolving: make(map[interface{}]bool),
 		cache:       make(map[interface{}]map[string]interface{}),
 		toResolve:   make(map[interface{}][]func(m map[string]interface{})),
 	}
-	m, err := mapper.cachedFlattenStruct(s, flattenResolver)
+
+	m, err := mapper.cachedFlattenStruct(sp, flattenResolver)
 
 	// resolve pointers
 	for k, v := range flattenResolver.cache {

@@ -12,7 +12,8 @@ Convert a struct into a map and vice versa.
 - Handles composed structs
 - Handles nested structs
 - Handles reference cycles
-- Supports field filtering or conversion
+- Supports unexported fields
+- Supports field mapping or conversion
 
 #### Prerequisites
 
@@ -23,17 +24,26 @@ go get -u github.com/jschoedt/go-structmapper
 #### Default usage
 
 ```go
-s := SomeStruce{Name: "John"}
+// convert struct to map
+s := &SomeStruce{Name: "John"}
 mapper := New()
-m, err := mapper.MapStructToMap(s)
-m["Name"] == "John"
+m, err := mapper.MapStructToMap(s) // m["Name"] == "John"
+
+// convert map to struct
+s = &SomeStruce{}
+mapper.MapToStruct(m, &s) // s.Name == "John"
 ```
 
 #### Using a conversion mapping
 
+A MapFunc can be used to map a key or value to some other key or value. Returning the MappingType Ignore will ignore that field. The MapFunc will be called on every field that is
+encountered in the struct
+
 ```go
 s := SomeStruce{Name: "John"}
-mapper := NewWithFilter(LowercaseMapFunk)
-m, err := mapper.MapStructToMap(s)
-m["name"] == "John"
+mapFunc := func(inKey string, inVal interface{}) (mt MappingType, outKey string, outVal interface{}) {
+	return Default, strings.ToLower(inKey), inVal
+}
+mapper := NewWithMapFunc(mapFunc)
+m, err := mapper.MapStructToMap(s) // m["name"] == "John"
 ```
