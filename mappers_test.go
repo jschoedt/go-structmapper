@@ -97,6 +97,7 @@ func TestFilter(t *testing.T) {
 		t.Errorf("The lowercase key:'name' was not set om the map")
 	}
 
+	john.Name = ""
 	m["Name"] = "Deere"
 	if err := mapper.MapToStruct(m, &john); err != nil {
 		t.Errorf("Could not map to struct %v", err)
