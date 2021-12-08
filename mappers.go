@@ -3,6 +3,7 @@ package mapper
 import (
 	"errors"
 	"reflect"
+	"strconv"
 	"strings"
 	"unsafe"
 )
@@ -33,7 +34,7 @@ type Mapper struct {
 
 // New creates a new mapper
 func New() *Mapper {
-	m := &Mapper{DefaultMapFunc}
+	m := &Mapper{NilMapFunc}
 	return m
 }
 
@@ -43,9 +44,22 @@ func NewWithMapFunc(mapFunc MapFunc) *Mapper {
 	return m
 }
 
-// DefaultMapFunc default mapper that returns the same field name and value
-func DefaultMapFunc(inKey string, inVal interface{}) (mt MappingType, outKey string, outVal interface{}) {
+// NilMapFunc default mapper that returns the same field name and value
+func NilMapFunc(inKey string, inVal interface{}) (mt MappingType, outKey string, outVal interface{}) {
+	if isNil(inVal) {
+		return Ignore, inKey, nil
+	}
 	return Default, inKey, inVal
+}
+
+// IsNil returns true if val is nil or a nil pointer
+func isNil(val interface{}) bool {
+	if val == nil {
+		return true
+	} else if reflect.ValueOf(val).Kind() == reflect.Ptr && reflect.ValueOf(val).IsNil() {
+		return true
+	}
+	return false
 }
 
 // MapToStruct takes a map or a struct ptr (as fromPtr) and maps to a struct ptr
@@ -80,14 +94,15 @@ func (mapper *Mapper) mapMapToValues(fromMap map[string]reflect.Value, toPtr ref
 	//fmt.Printf("toMap: %v  \n", toMap)
 	//fmt.Printf("fromMap: %v  \n", fromMap)
 	for fromName, fromField := range fromMap {
+		mt, fromName, fromMapping := mapper.MapFunc(fromName, getDefaultValue(fromField))
+		fromField := reflect.ValueOf(fromMapping)
+
 		if toField, ok := toMap[fromName]; ok {
 			kind := fromField.Kind()
 			if kind == reflect.Invalid {
 				continue
 			}
 
-			mt, fromName, fromMapping := mapper.MapFunc(fromName, fromField.Interface())
-			fromField := reflect.ValueOf(fromMapping)
 			switch mt {
 			case Ignore:
 				continue
@@ -103,16 +118,24 @@ func (mapper *Mapper) mapMapToValues(fromMap map[string]reflect.Value, toPtr ref
 			}
 
 			// convert the types
+			var err error
 			switch kind {
 			case reflect.Map: // try to map to object
-				fromField = mapper.getFromValue(c, fromField, toField.Type())
+				fromField, err = mapper.getFromValue(c, fromField, toField.Type())
+				if err != nil {
+					errStrings = append(errStrings, "from map: "+fromName+": "+err.Error())
+				}
 			case reflect.Slice: // try to map to slice of objects
 				if fromField.Len() == 0 {
 					continue
 				} else {
 					elemSlice := reflect.MakeSlice(toField.Type(), fromField.Len(), fromField.Len())
 					for i := 0; i < fromField.Len(); i++ {
-						setField(mapper.getFromValue(c, fromField.Index(i), toField.Type().Elem()), elemSlice.Index(i))
+						if value, err := mapper.getFromValue(c, fromField.Index(i), toField.Type().Elem()); err != nil {
+							errStrings = append(errStrings, "from slice: "+fromName+"["+strconv.Itoa(i)+"]: "+err.Error())
+						} else {
+							setField(value, elemSlice.Index(i))
+						}
 					}
 					fromField = elemSlice
 				}
@@ -134,27 +157,31 @@ func (mapper *Mapper) mapMapToValues(fromMap map[string]reflect.Value, toPtr ref
 
 func stringVal(val reflect.Value) string {
 	if !val.IsValid() {
-		return "nil"
+		return "nil of type:" + val.String()
 	}
-	i := val.Interface()
-	if v, ok := i.(reflect.Value); ok {
-		return stringVal(v)
+	if val.CanInterface() {
+		i := val.Interface()
+		if v, ok := i.(reflect.Value); ok {
+			return stringVal(v)
+		}
+		if v, ok := i.(string); ok {
+			return v
+		}
+		return val.Type().String()
 	}
-	if v, ok := i.(string); ok {
-		return v
-	}
-	return "Unknown"
+
+	return "nil of type: " + val.Type().String()
 }
 
 // Handles the creation of a value or a pointer to a value according to toType
-func (mapper *Mapper) getFromValue(c map[interface{}]reflect.Value, fromField reflect.Value, toType reflect.Type) reflect.Value {
+func (mapper *Mapper) getFromValue(c map[interface{}]reflect.Value, fromField reflect.Value, toType reflect.Type) (reflect.Value, error) {
 	var result reflect.Value
 	//log.Printf("from: %v", reflect.TypeOf(fromField.Interface()))
 	//log.Printf("to: %v", toType)
 	if e, ok := c[fromField]; ok {
 		result = e
 	} else if reflect.TypeOf(fromField.Interface()).ConvertibleTo(toType) {
-		return reflect.ValueOf(fromField.Interface())
+		return reflect.ValueOf(fromField.Interface()), nil
 	} else {
 		if toType.Kind() == reflect.Map {
 			result = reflect.MakeMapWithSize(toType, fromField.Len())
@@ -177,18 +204,22 @@ func (mapper *Mapper) getFromValue(c map[interface{}]reflect.Value, fromField re
 		} else if toType.Kind() == reflect.Ptr {
 			result = reflect.New(toType.Elem())
 			c[fromField] = result
-			mapper.cachedMapMapToStruct(fromField.Interface(), result.Interface(), c)
+			if err := mapper.cachedMapMapToStruct(fromField.Interface(), result.Interface(), c); err != nil {
+				return result, err
+			}
 		} else {
 			result = reflect.New(toType)
 			c[fromField] = result
-			mapper.cachedMapMapToStruct(fromField.Interface(), result.Interface(), c)
+			if err := mapper.cachedMapMapToStruct(fromField.Interface(), result.Interface(), c); err != nil {
+				return reflect.Indirect(result), err
+			}
 		}
 
 	}
 	if toType.Kind() == reflect.Ptr {
-		return result
+		return result, nil
 	}
-	return reflect.Indirect(result)
+	return reflect.Indirect(result), nil
 }
 
 func setField(fromField reflect.Value, toField reflect.Value) {
@@ -252,7 +283,11 @@ func (mapper *Mapper) cachedFlattenStruct(s interface{}, resolver *flattenResolv
 		case reflect.Interface:
 			fallthrough
 		case reflect.Ptr:
-			// handle nil pointers and other types than struct
+			if f.IsNil() {
+				fields[key] = getDefaultValue(f)
+				break
+			}
+
 			val := reflect.Indirect(f)
 			if val.Kind() == reflect.Invalid || val.Kind() != reflect.Struct {
 				fields[key] = getDefaultValue(val)
@@ -317,7 +352,7 @@ func (mapper *Mapper) cachedFlattenStruct(s interface{}, resolver *flattenResolv
 
 func getDefaultValue(f reflect.Value) interface{} {
 	if !f.IsValid() {
-		return reflect.ValueOf(nil)
+		return nil
 	}
 	if !f.CanInterface() {
 		// now we can get unexported fields

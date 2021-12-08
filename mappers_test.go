@@ -2,13 +2,14 @@ package mapper
 
 import (
 	"github.com/google/go-cmp/cmp"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
 )
 
 type ID struct {
-	ID string
+	Id string
 }
 
 type Person struct {
@@ -72,6 +73,10 @@ func TestStructToMap(t *testing.T) {
 		t.Errorf("The structs cycle did not match %v - %v", car, newCar)
 	}
 
+	if car.Driver.Spouse != nil && len(car.Driver.Relations) != 0 {
+		t.Errorf("The structs cycle did not match %v - %v", car, newCar)
+	}
+
 	//  cmp.Equal does not handle cycles so break it
 	car.Owner.Spouse.Spouse = nil
 	newCar.Owner.Spouse.Spouse = nil
@@ -93,11 +98,28 @@ func TestFilter(t *testing.T) {
 		t.Errorf("Could not convert struct to map %v", err)
 	}
 
+	if m["spouse"] != nil && (reflect.ValueOf(m["spouse"]).Kind() == reflect.Ptr && !reflect.ValueOf(m["spouse"]).IsNil()) {
+		t.Errorf("spouse sould be the nil %v", err)
+	}
+
 	if _, ok := m["name"]; !ok {
 		t.Errorf("The lowercase key:'name' was not set om the map")
 	}
 
+	mapper.MapFunc = func(inKey string, inVal interface{}) (mt MappingType, outKey string, outVal interface{}) {
+		return Default, strings.Title(inKey), inVal
+	}
 	john.Name = ""
+	if err := mapper.MapToStruct(m, &john); err != nil {
+		t.Errorf("Could not map to struct %v", err)
+	}
+
+	if john.Name != "John" {
+		t.Errorf("Name should me John")
+	}
+
+	john.Name = ""
+	delete(m, "name")
 	m["Name"] = "Deere"
 	if err := mapper.MapToStruct(m, &john); err != nil {
 		t.Errorf("Could not map to struct %v", err)
@@ -106,4 +128,19 @@ func TestFilter(t *testing.T) {
 	if john.Name != "Deere" {
 		t.Errorf("Name should me Deere")
 	}
+}
+
+func TestZeroValues(t *testing.T) {
+	john := Person{Name: "John"}
+
+	mapper := New()
+	m, err := mapper.StructToMap(&john)
+	if err != nil {
+		t.Errorf("Could not convert struct to map %v", err)
+	}
+
+	if m["Spouse"] != nil {
+		t.Errorf("spouse sould be the nil %v", err)
+	}
+
 }
