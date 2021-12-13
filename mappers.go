@@ -29,31 +29,28 @@ type MapFunc func(inKey string, inVal interface{}) (mt MappingType, outKey strin
 
 // Mapper used for mapping structs to maps or other structs
 type Mapper struct {
+	// MapFunc maps keys and values to some other key or value
 	MapFunc MapFunc
+	// CaseSensitive if MapToStruct should be case-sensitive
+	CaseSensitive bool
 }
 
 // New creates a new mapper
 func New() *Mapper {
-	m := &Mapper{NilMapFunc}
-	return m
-}
-
-// NewWithMapFunc with a custom MapFunc
-func NewWithMapFunc(mapFunc MapFunc) *Mapper {
-	m := &Mapper{mapFunc}
+	m := &Mapper{NilMapFunc, true}
 	return m
 }
 
 // NilMapFunc default mapper that returns the same field name and value
 func NilMapFunc(inKey string, inVal interface{}) (mt MappingType, outKey string, outVal interface{}) {
-	if isNil(inVal) {
+	if IsNil(inVal) {
 		return Ignore, inKey, nil
 	}
 	return Default, inKey, inVal
 }
 
 // IsNil returns true if val is nil or a nil pointer
-func isNil(val interface{}) bool {
+func IsNil(val interface{}) bool {
 	if val == nil {
 		return true
 	} else if reflect.ValueOf(val).Kind() == reflect.Ptr && reflect.ValueOf(val).IsNil() {
@@ -97,7 +94,7 @@ func (mapper *Mapper) mapMapToValues(fromMap map[string]reflect.Value, toPtr ref
 		mt, fromName, fromMapping := mapper.MapFunc(fromName, getDefaultValue(fromField))
 		fromField := reflect.ValueOf(fromMapping)
 
-		if toField, ok := toMap[fromName]; ok {
+		if toField, ok := toMap[mapper.setCasing(fromName)]; ok {
 			kind := fromField.Kind()
 			if kind == reflect.Invalid {
 				continue
@@ -376,7 +373,7 @@ func (mapper *Mapper) flatten(v reflect.Value) map[string]reflect.Value {
 			if sf.Anonymous {
 				embedFields := mapper.flatten(f)
 				for k, v := range embedFields {
-					fields[k] = v
+					fields[mapper.setCasing(k)] = v
 				}
 				break
 			}
@@ -387,8 +384,15 @@ func (mapper *Mapper) flatten(v reflect.Value) map[string]reflect.Value {
 				//fmt.Printf("unexported field: %v  \n", sf.Name)
 				f = reflect.NewAt(f.Type(), unsafe.Pointer(f.UnsafeAddr())).Elem()
 			}
-			fields[sf.Name] = f
+			fields[mapper.setCasing(sf.Name)] = f
 		}
 	}
 	return fields
+}
+
+func (mapper *Mapper) setCasing(s string) string {
+	if mapper.CaseSensitive == false {
+		return strings.ToLower(s)
+	}
+	return s
 }

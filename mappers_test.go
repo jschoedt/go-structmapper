@@ -2,7 +2,6 @@ package mapper
 
 import (
 	"github.com/google/go-cmp/cmp"
-	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -89,16 +88,16 @@ func TestStructToMap(t *testing.T) {
 func TestFilter(t *testing.T) {
 	john := Person{Name: "John"}
 
-	mapFunc := func(inKey string, inVal interface{}) (mt MappingType, outKey string, outVal interface{}) {
+	mapper := New()
+	mapper.MapFunc = func(inKey string, inVal interface{}) (mt MappingType, outKey string, outVal interface{}) {
 		return Default, strings.ToLower(inKey), inVal
 	}
-	mapper := NewWithMapFunc(mapFunc)
 	m, err := mapper.StructToMap(&john)
 	if err != nil {
 		t.Errorf("Could not convert struct to map %v", err)
 	}
 
-	if m["spouse"] != nil && (reflect.ValueOf(m["spouse"]).Kind() == reflect.Ptr && !reflect.ValueOf(m["spouse"]).IsNil()) {
+	if !IsNil(m["spouse"]) {
 		t.Errorf("spouse sould be the nil %v", err)
 	}
 
@@ -140,7 +139,39 @@ func TestZeroValues(t *testing.T) {
 	}
 
 	if m["Spouse"] != nil {
-		t.Errorf("spouse sould be the nil %v", err)
+		t.Errorf("spouse sould be the nil reference %v", err)
+	}
+}
+
+func TestCaseSensitive(t *testing.T) {
+	john := Person{Name: "John"}
+
+	mapper := New()
+	err := mapper.MapToStruct(map[string]interface{}{"name": "Deere"}, &john)
+	if err != nil {
+		t.Errorf("Could not convert map to struct %v", err)
 	}
 
+	if john.Name != "John" {
+		t.Errorf("name should be %v", "John")
+	}
+
+	err = mapper.MapToStruct(map[string]interface{}{"Name": "Deere"}, &john)
+	if err != nil {
+		t.Errorf("Could not convert map to struct %v", err)
+	}
+
+	if john.Name != "Deere" {
+		t.Errorf("name should be %v", "Deere")
+	}
+
+	mapper.CaseSensitive = false
+	err = mapper.MapToStruct(map[string]interface{}{"name": "John"}, &john)
+	if err != nil {
+		t.Errorf("Could not convert map to struct %v", err)
+	}
+
+	if john.Name != "John" {
+		t.Errorf("name should be %v", "John")
+	}
 }

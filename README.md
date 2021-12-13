@@ -31,24 +31,33 @@ go get -u github.com/jschoedt/go-structmapper
 ```go
 // convert struct to map
 s := &SomeStruct{Name: "John"}
-mapper := New()
-m, err := mapper.MapStructToMap(s) // m["Name"] == "John"
+mapper := mapper.New()
+m, err := mapper.StructToMap(s) // m["Name"] == "John"
 
 // convert map to struct
 s = &SomeStruct{}
-mapper.MapToStruct(m, &s) // s.Name == "John"
+err := mapper.MapToStruct(m, &s) // s.Name == "John"
 ```
 
 #### Using a conversion mapping
 
-A MapFunc can be used to map a key or value to some other key or value. Returning the MappingType Ignore will ignore that field. The MapFunc will be called on every field that is
-encountered in the struct
+A MapFunc can be used to map a key or value to some other key or value. Returning the MappingType mapper.Ignore will ignore that field. The MapFunc will be called on every field
+that is encountered in the struct
 
 ```go
 s := &SomeStruct{Name: "John"}
-mapFunc := func(inKey string, inVal interface{}) (mt MappingType, outKey string, outVal interface{}) {
+mapper := mapper.New()
+mapper.MapFunc = func(inKey string, inVal interface{}) (mt MappingType, outKey string, outVal interface{}) {
 	return Default, strings.ToLower(inKey), "Deere"
 }
-mapper := NewWithMapFunc(mapFunc)
-m, err := mapper.MapStructToMap(s) // m["name"] == "Deere"
+m, err := mapper.StructToMap(s) // m["name"] == "Deere"
+
+// convert map to struct
+s = &SomeStruct{}
+mapper.CaseSensitive = false // now 'name' will match 'Name'
+err := mapper.MapToStruct(m, &s) // s.Name == "Deere"
 ```
+
+[More examples](https://github.com/jschoedt/go-structmapper/blob/master/mappers_test.go)
+
+
