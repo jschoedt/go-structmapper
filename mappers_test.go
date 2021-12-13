@@ -147,7 +147,7 @@ func TestCaseSensitive(t *testing.T) {
 	john := Person{Name: "John"}
 
 	mapper := New()
-	err := mapper.MapToStruct(map[string]interface{}{"name": "Deere"}, &john)
+	err := mapper.MapToStruct(map[string]string{"name": "Deere"}, &john)
 	if err != nil {
 		t.Errorf("Could not convert map to struct %v", err)
 	}
@@ -156,7 +156,7 @@ func TestCaseSensitive(t *testing.T) {
 		t.Errorf("name should be %v", "John")
 	}
 
-	err = mapper.MapToStruct(map[string]interface{}{"Name": "Deere"}, &john)
+	err = mapper.MapToStruct(map[string]string{"Name": "Deere"}, &john)
 	if err != nil {
 		t.Errorf("Could not convert map to struct %v", err)
 	}
@@ -166,7 +166,7 @@ func TestCaseSensitive(t *testing.T) {
 	}
 
 	mapper.CaseSensitive = false
-	err = mapper.MapToStruct(map[string]interface{}{"name": "John"}, &john)
+	err = mapper.MapToStruct(map[string]string{"name": "John"}, &john)
 	if err != nil {
 		t.Errorf("Could not convert map to struct %v", err)
 	}

@@ -68,19 +68,20 @@ func (mapper *Mapper) MapToStruct(fromPtr interface{}, toPtr interface{}) error 
 func (mapper *Mapper) cachedMapMapToStruct(fromPtr interface{}, toPtr interface{}, c map[interface{}]reflect.Value) error {
 	toStruct := reflect.Indirect(reflect.ValueOf(toPtr))
 	fromStruct := reflect.Indirect(reflect.ValueOf(fromPtr))
-	m, ok := fromPtr.(map[string]interface{})
-	if ok {
-		valMap := make(map[string]reflect.Value, len(m))
-		for k, v := range m {
-			valMap[k] = reflect.ValueOf(v)
+	if fromStruct.Kind() == reflect.Map {
+		valMap := make(map[string]reflect.Value, fromStruct.Len())
+		for _, k := range fromStruct.MapKeys() {
+			valMap[k.String()] = fromStruct.MapIndex(k)
 		}
 		return mapper.mapMapToValues(valMap, toStruct, c)
+	} else if fromStruct.Kind() == reflect.Struct {
+		fromMap, err := mapper.StructToMap(fromStruct)
+		if err != nil {
+			return err
+		}
+		return mapper.cachedMapMapToStruct(fromMap, toStruct, c)
 	}
-	fromMap, err := mapper.StructToMap(fromStruct)
-	if err != nil {
-		return err
-	}
-	return mapper.cachedMapMapToStruct(fromMap, toStruct, c)
+	return errors.New("fromPtr must be either map or struct")
 }
 
 func (mapper *Mapper) mapMapToValues(fromMap map[string]reflect.Value, toPtr reflect.Value, c map[interface{}]reflect.Value) error {
