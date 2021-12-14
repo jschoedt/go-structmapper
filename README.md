@@ -24,6 +24,7 @@ A mapping function can be used to convert keys or values before they are set.
 - Supports field mapping or conversion
 
 #### Prerequisites
+Not all types are tested or supported yet eg. interface, function, channel
 
 ```
 go get -u github.com/jschoedt/go-structmapper

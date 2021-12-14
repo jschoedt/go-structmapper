@@ -97,10 +97,6 @@ func TestFilter(t *testing.T) {
 		t.Errorf("Could not convert struct to map %v", err)
 	}
 
-	if !IsNil(m["spouse"]) {
-		t.Errorf("spouse sould be the nil %v", err)
-	}
-
 	if _, ok := m["name"]; !ok {
 		t.Errorf("The lowercase key:'name' was not set om the map")
 	}
@@ -173,5 +169,15 @@ func TestCaseSensitive(t *testing.T) {
 
 	if john.Name != "John" {
 		t.Errorf("name should be %v", "John")
+	}
+}
+
+func TestErrorMessage(t *testing.T) {
+	john := Person{Name: "John"}
+
+	mapper := New()
+	err := mapper.MapToStruct(map[string]interface{}{"Name": &john}, &john)
+	if err == nil {
+		t.Errorf("A conversion error is expected")
 	}
 }
