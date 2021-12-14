@@ -6,11 +6,14 @@
 
 # go-structmapper
 
-Convert a struct into a map and vice versa.
+Convert any struct into a map and vice versa.
 
 # Description
 
-Convert a struct into a map and vice versa.
+This library can recursively convert a struct to a map of type ```map[string]interface{}``` where the keys are the struct field names and the values are the field values.
+Similarly, the library can set the fields of a struct using a map.
+
+A mapping function can be used to convert keys or values before they are set.
 
 #### Features
 
@@ -36,7 +39,7 @@ m, err := mapper.StructToMap(s) // m["Name"] == "John"
 
 // convert map to struct
 s = &SomeStruct{}
-err := mapper.MapToStruct(m, &s) // s.Name == "John"
+err := mapper.MapToStruct(m, s) // s.Name == "John"
 ```
 
 #### Using a conversion mapping
@@ -48,14 +51,14 @@ that is encountered in the struct
 s := &SomeStruct{Name: "John"}
 mapper := mapper.New()
 mapper.MapFunc = func(inKey string, inVal interface{}) (mt MappingType, outKey string, outVal interface{}) {
-	return Default, strings.ToLower(inKey), "Deere"
+	return mapper.Default, strings.ToLower(inKey), "Deere"
 }
 m, err := mapper.StructToMap(s) // m["name"] == "Deere"
 
 // convert map to struct
 s = &SomeStruct{}
 mapper.CaseSensitive = false // now 'name' will match 'Name'
-err := mapper.MapToStruct(m, &s) // s.Name == "Deere"
+err := mapper.MapToStruct(m, s) // s.Name == "Deere"
 ```
 
 [More examples](https://github.com/jschoedt/go-structmapper/blob/master/mappers_test.go)
