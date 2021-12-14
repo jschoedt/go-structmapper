@@ -288,7 +288,7 @@ func (mapper *Mapper) cachedFlattenStruct(s interface{}, resolver *flattenResolv
 
 			val := reflect.Indirect(f)
 			if val.Kind() == reflect.Invalid || val.Kind() != reflect.Struct {
-				fields[key] = getDefaultValue(val)
+				fields[key] = getDefaultValue(f)
 				break
 			}
 

@@ -23,7 +23,7 @@ type Car struct {
 	Owner      *Person
 	Driver     Person
 	Passengers []Person
-	Tags       []string
+	Tags       *[]string
 	Numbers    []int
 	Year       time.Time
 }
@@ -46,13 +46,14 @@ func TestStructToMap(t *testing.T) {
 	john.Relations = []*Relation{{Friends: []*Person{friend1, friend2}}}
 
 	now := time.Now()
+	tags := []string{"tag1", "tag2"}
 
 	car := &Car{
 		Make:       "Toyota",
 		Owner:      &john,
 		Driver:     Person{Name: "Mark"}, // embedded entity
 		Passengers: []Person{john, mary},
-		Tags:       []string{"tag1", "tag2"},
+		Tags:       &tags,
 		Numbers:    []int{1, 2, 3},
 		Year:       now,
 	}
@@ -176,7 +177,7 @@ func TestErrorMessage(t *testing.T) {
 	john := Person{Name: "John"}
 
 	mapper := New()
-	err := mapper.MapToStruct(map[string]interface{}{"Name": &john}, &john)
+	err := mapper.MapToStruct(map[string]interface{}{"Name": false}, &john)
 	if err == nil {
 		t.Errorf("A conversion error is expected")
 	}
